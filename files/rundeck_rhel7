@@ -1,0 +1,13 @@
+[Unit]
+Description=RunDeck container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+RestartSec=1s
+ExecStart=/usr/bin/docker start -a rundeck
+ExecStop=/usr/bin/docker stop -t 2 rundeck
+
+[Install]
+WantedBy=multi-user.target

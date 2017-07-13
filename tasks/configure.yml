@@ -1,0 +1,66 @@
+---
+#- name: Create group
+#  shell: groupadd -o -g {{ rundeck_group_id }} {{ rundeck_group }}
+#  ignore_errors: true
+
+#- name: Create user
+#  user: name={{ rundeck_user }} uid={{ rundeck_user_id }} group={{ rundeck_group }} non_unique=true
+
+#Create required directories
+- name: Create Directories
+  file: path={{ item }} state=directory #owner={{ rundeck_user }} group={{ rundeck_group }}
+  with_items:
+    - "{{ rundeck_conf_dir }}"
+    - "{{ rundeck_data_dir }}"
+    - "{{ rundeck_log_dir }}"
+
+- name: 
+  template: src=rundeck-config.properties dest="{{ rundeck_conf_dir }}/rundeck-config.properties"  #owner={{ rundeck_user }} group={{ rundeck_group }}
+  notify:
+    - restart rundeck
+
+
+- name: Pull rundeck image
+  shell: docker pull "{{ rundeck_docker_image }}:{{ rundeck_version }}"
+  register: result_docker
+  changed_when: False
+  until: result_docker|success
+  retries: 3
+  delay: 1
+  tags: update
+
+- name: Start rundeck containers
+  docker_container:
+    name: rundeck
+    image: "{{ rundeck_docker_image }}:{{ rundeck_version }}"
+    network_mode: host
+    state: present
+    restart_policy: unless-stopped
+    restart_retries: 3
+    log_driver: json-file
+    log_options:
+      max-file: "1"
+      max-size: "20m"
+    labels: "{{ rundeck_docker_labels }}"
+    volumes:
+      - "{{ rundeck_conf_dir }}/rundeck-config.properties:{{ rundeck_conf_dir }}/server/config/rundeck-config.properties"
+      - "{{ rundeck_data_dir }}:/etc/rundeck/server/data"
+      - "{{ rundeck_log_dir }}:/etc/rundeck/server/logs"
+      - /etc/hosts:/etc/hosts
+      - /etc/localtime:/etc/localtime
+
+
+- name: Create init-script rhel6
+  copy: src=rundeck_rhel6 dest=/etc/init.d/rundeck owner=root group=root mode=0755
+  when:
+    ansible_distribution_major_version|int < 7
+    and ansible_os_family == 'RedHat'
+
+- name: Create init-script rhel7
+  copy: src=rundeck_rhel7 dest=/usr/lib/systemd/system/rundeck.service owner=root group=root mode=0644
+  when:
+    ansible_distribution_major_version|int > 6
+    and ansible_os_family == 'RedHat'
+
+- name: Enable init-scripts
+  service: name=rundeck enabled=yes state=started
