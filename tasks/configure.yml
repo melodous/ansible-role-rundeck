@@ -14,7 +14,7 @@
     - "{{ rundeck_data_dir }}"
     - "{{ rundeck_log_dir }}"
 
-- name: 
+- name: Copy rundeck configuration file
   template: src=rundeck-config.properties dest="{{ rundeck_conf_dir }}/rundeck-config.properties"  #owner={{ rundeck_user }} group={{ rundeck_group }}
   notify:
     - restart rundeck
@@ -27,7 +27,9 @@
   until: result_docker|success
   retries: 3
   delay: 1
-  tags: update
+  tags:
+    - update
+    - skip_ansible_lint
 
 - name: Start rundeck containers
   docker_container:
